@@ -1,34 +1,52 @@
 import { Module } from '@nestjs/common';
-import { AuthModule } from './auth/auth.module';
-import { UsersModule } from './users/users.module';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule } from '@nestjs/config';
-import { MailModule } from './mail/mail.module';
-import { RolesModule } from './roles/roles.module';
-import { PermissionsModule } from './permissions/permissions.module';
+import { BullModule } from '@nestjs/bullmq';
+import { ScheduleModule } from '@nestjs/schedule';
+import configuration from './config/configuration';
+import { getDatabaseConfig } from './config/database.config';
+import { SourcesModule } from './sources/sources.module';
+import { TendersModule } from './tenders/tenders.module';
+import { BoardModule } from './board/board.module';
+import { CompanyModule } from './company/company.module';
+import { VectorizationModule } from './vectorization/vectorization.module';
+import { JobsModule } from './jobs/jobs.module';
 
 @Module({
   imports: [
+    // Configuration
     ConfigModule.forRoot({
-      envFilePath: './.env',
+      isGlobal: true,
+      load: [configuration],
     }),
-    AuthModule,
-    UsersModule,
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: process.env.DB_HOST,
-      port: parseInt(process.env.DB_PORT),
-      username: process.env.DB_USER,
-      password: process.env.DB_PASS,
-      database: process.env.DB_NAME,
-      autoLoadEntities: true,
-      logging: false,
+
+    // Database
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: getDatabaseConfig,
     }),
-    MailModule,
-    RolesModule,
-    PermissionsModule,
+
+    // Redis queues
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get('redis.host'),
+          port: config.get('redis.port'),
+        },
+      }),
+    }),
+
+    // Cron scheduler
+    ScheduleModule.forRoot(),
+
+    // Feature modules
+    SourcesModule,
+    TendersModule,
+    BoardModule,
+    CompanyModule,
+    VectorizationModule,
+    JobsModule,
   ],
-  controllers: [],
-  providers: [],
 })
 export class AppModule {}

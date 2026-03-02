@@ -1,27 +1,40 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Configuración de Swagger
+  app.setGlobalPrefix('api');
+  app.enableCors();
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
   const config = new DocumentBuilder()
-    .setTitle('API de Usuarios')
-    .setDescription('API para CRUD y autorizacion de usuarios')
-    .setVersion('1.0')
-    .addBearerAuth()
+    .setTitle('LYN Licitaciones API')
+    .setDescription(
+      'Plataforma de búsqueda y gestión de licitaciones públicas - LYN Soluciones Tecnológicas',
+    )
+    .setVersion('0.1.0')
+    .addTag('tenders', 'Gestión de licitaciones')
+    .addTag('sources', 'Fuentes de datos')
+    .addTag('board', 'Tablero Kanban')
+    .addTag('company', 'Perfil de empresa')
+    .addTag('search', 'Búsqueda vectorial')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup('docs', app, document);
 
-  app.enableCors({
-    origin: process.env.URL_FRONT,
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials: true,
-  });
-
-  await app.listen(process.env.PORT);
+  const port = process.env.PORT || 3000;
+  await app.listen(port);
+  console.log(`LYN Licitaciones API running on port ${port}`);
+  console.log(`Swagger docs: http://localhost:${port}/docs`);
 }
 bootstrap();
