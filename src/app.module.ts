@@ -11,6 +11,10 @@ import { BoardModule } from './board/board.module';
 import { CompanyModule } from './company/company.module';
 import { VectorizationModule } from './vectorization/vectorization.module';
 import { JobsModule } from './jobs/jobs.module';
+import { AiModule } from './ai/ai.module';
+import { SearchProfilesModule } from './search-profiles/search-profiles.module';
+import { AiTasksModule } from './ai-tasks/ai-tasks.module';
+import { PipelineModule } from './pipeline/pipeline.module';
 
 @Module({
   imports: [
@@ -40,13 +44,19 @@ import { JobsModule } from './jobs/jobs.module';
     // Cron scheduler
     ScheduleModule.forRoot(),
 
-    // Feature modules
+    // Core modules
     SourcesModule,
     TendersModule,
     BoardModule,
     CompanyModule,
     VectorizationModule,
     JobsModule,
+
+    // AI & smart search
+    AiModule,
+    SearchProfilesModule,
+    AiTasksModule,
+    PipelineModule,
   ],
 })
 export class AppModule {}

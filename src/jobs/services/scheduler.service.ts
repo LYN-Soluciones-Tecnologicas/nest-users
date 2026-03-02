@@ -4,7 +4,8 @@ import { Queue } from 'bullmq';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 /**
- * Schedules recurring jobs for data ingestion and embedding generation.
+ * Schedules recurring jobs for data ingestion, embedding generation,
+ * and the daily pipeline.
  */
 @Injectable()
 export class SchedulerService implements OnModuleInit {
@@ -13,6 +14,7 @@ export class SchedulerService implements OnModuleInit {
   constructor(
     @InjectQueue('ingestion') private readonly ingestionQueue: Queue,
     @InjectQueue('embedding') private readonly embeddingQueue: Queue,
+    @InjectQueue('pipeline') private readonly pipelineQueue: Queue,
   ) {}
 
   async onModuleInit() {
@@ -20,15 +22,30 @@ export class SchedulerService implements OnModuleInit {
   }
 
   /**
-   * Daily ingestion at 6:00 AM — fetch new tenders from all sources.
+   * Daily at 6:00 AM — run embeddings for any new tenders.
    */
   @Cron(CronExpression.EVERY_DAY_AT_6AM)
-  async scheduleDailyIngestion() {
-    this.logger.log('Scheduling daily ingestion');
-    await this.ingestionQueue.add('ingest-all', {}, {
-      removeOnComplete: 10,
-      removeOnFail: 5,
-    });
+  async scheduleEarlyEmbeddings() {
+    this.logger.log('Scheduling morning embedding batch');
+    await this.embeddingQueue.add(
+      'embed-batch',
+      { batchSize: 500 },
+      { removeOnComplete: 10, removeOnFail: 5 },
+    );
+  }
+
+  /**
+   * Daily at 7:00 AM — run the full daily pipeline
+   * (ingest + filter + vectorial search + prioritize + report).
+   */
+  @Cron('0 7 * * *')
+  async scheduleDailyPipeline() {
+    this.logger.log('Scheduling daily pipeline');
+    await this.pipelineQueue.add(
+      'daily-pipeline',
+      {},
+      { removeOnComplete: 10, removeOnFail: 5 },
+    );
   }
 
   /**

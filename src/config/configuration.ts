@@ -15,6 +15,12 @@ export default () => ({
     provider: process.env.EMBEDDING_PROVIDER || 'local',
     jinaApiKey: process.env.JINA_API_KEY || '',
   },
+  ai: {
+    llmProvider: process.env.LLM_PROVIDER || 'openai',
+    llmModel: process.env.LLM_MODEL || 'gpt-4o-mini',
+    llmApiKey: process.env.LLM_API_KEY || '',
+    llmBaseUrl: process.env.LLM_BASE_URL || '',
+  },
   placsp: {
     baseUrl:
       process.env.PLACSP_BASE_URL ||
