@@ -1,13 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { parseStringPromise } from 'xml2js';
 
 /**
  * Integration test: Validates a real ATOM feed from PLACSP.
  *
- * The fixture file __fixtures__/sample-feed.atom is a real download from:
- *   https://contrataciondelsectorpublico.gob.es/sindicacion/sindicacion_643/
- *     licitacionesPerfilesContratanteCompleto3.atom
+ * Downloads the feed via curl on first run and caches it as a fixture.
+ * Requires network access (via curl) on first execution.
  *
  * This test validates the structure, especially:
  *   - Entry source URL (link href)
@@ -15,6 +15,9 @@ import { parseStringPromise } from 'xml2js';
  *   - CODICE fields relevant for OCDS mapping
  */
 describe('PLACSP ATOM Feed - Real Data Validation', () => {
+  const ATOM_URL =
+    'https://contrataciondelsectorpublico.gob.es/sindicacion/sindicacion_643/licitacionesPerfilesContratanteCompleto3.atom';
+
   const ensureArray = (value: any): any[] => {
     if (!value) return [];
     return Array.isArray(value) ? value : [value];
@@ -25,7 +28,24 @@ describe('PLACSP ATOM Feed - Real Data Validation', () => {
   let entries: any[];
 
   beforeAll(async () => {
-    const fixturePath = path.join(__dirname, '__fixtures__', 'sample-feed.atom');
+    // Download fixture via curl if not cached
+    const fixtureDir = path.join(__dirname, '__fixtures__');
+    const fixturePath = path.join(fixtureDir, 'sample-feed.atom');
+
+    if (!fs.existsSync(fixturePath)) {
+      fs.mkdirSync(fixtureDir, { recursive: true });
+      try {
+        execSync(
+          `curl -sL --max-time 60 "${ATOM_URL}" -o "${fixturePath}"`,
+          { timeout: 70000 },
+        );
+      } catch {
+        // If curl fails, skip all tests gracefully
+        console.warn('Could not download ATOM feed — skipping integration tests');
+        return;
+      }
+    }
+
     feedXml = fs.readFileSync(fixturePath, 'utf-8');
 
     parsed = await parseStringPromise(feedXml, {
@@ -36,7 +56,7 @@ describe('PLACSP ATOM Feed - Real Data Validation', () => {
 
     const feed = parsed.feed || parsed;
     entries = ensureArray(feed.entry || []);
-  });
+  }, 90000);
 
   it('should parse the ATOM feed successfully', () => {
     expect(feedXml).toBeDefined();

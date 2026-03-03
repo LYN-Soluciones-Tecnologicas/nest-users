@@ -55,6 +55,6 @@ pids
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
-# Test fixtures (large downloaded files)
-__fixtures__/*.atom
+# Test fixtures (downloaded on demand by integration tests)
+**/__fixtures__/
 plan.md
