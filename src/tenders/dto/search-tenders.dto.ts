@@ -11,6 +11,11 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { TenderStatus, ContractType } from '../entities/tender.entity';
+import {
+  OcdsTenderStatus,
+  OcdsProcurementMethod,
+  OcdsProcurementCategory,
+} from '../../common/ocds';
 
 export class SearchTendersDto {
   @ApiPropertyOptional({ description: 'Text search in title/description' })
@@ -76,6 +81,34 @@ export class SearchTendersDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   hideDismissed?: boolean;
+
+  // ─── OCDS filters ──────────────────────────────────────────────────────
+
+  @ApiPropertyOptional({
+    description: 'OCDS tender status',
+    enum: OcdsTenderStatus,
+  })
+  @IsOptional()
+  @IsString()
+  ocdsStatus?: OcdsTenderStatus;
+
+  @ApiPropertyOptional({
+    description: 'OCDS procurement method',
+    enum: OcdsProcurementMethod,
+  })
+  @IsOptional()
+  @IsString()
+  procurementMethod?: OcdsProcurementMethod;
+
+  @ApiPropertyOptional({
+    description: 'OCDS main procurement category',
+    enum: OcdsProcurementCategory,
+  })
+  @IsOptional()
+  @IsString()
+  mainProcurementCategory?: OcdsProcurementCategory;
+
+  // ─── Pagination & sorting ──────────────────────────────────────────────
 
   @ApiPropertyOptional({ description: 'Page number', default: 1 })
   @IsOptional()

@@ -1,5 +1,16 @@
+import {
+  OcdsItem,
+  OcdsDocument,
+  OcdsOrganizationReference,
+  OcdsOrganization,
+  OcdsMilestone,
+  OcdsAmendment,
+} from '../ocds';
+
 /**
  * Raw tender data from any source, before normalization.
+ * Supports both legacy flat fields and OCDS-compatible structured fields.
+ * Adapters can populate either set — the ingestion service will reconcile both.
  */
 export interface RawTenderData {
   /** External ID from the source */
@@ -36,6 +47,43 @@ export interface RawTenderData {
   isMinorContract?: boolean;
   /** Raw data from the source for reference */
   rawData?: Record<string, unknown>;
+
+  // ─── OCDS-compatible fields ───────────────────────────────────────────
+
+  /** Open Contracting ID (if the source provides one) */
+  ocid?: string;
+  /** OCDS procurement method (open, selective, limited, direct) */
+  procurementMethod?: string;
+  /** Free-text procurement method detail */
+  procurementMethodDetails?: string;
+  /** OCDS main procurement category (goods, works, services) */
+  mainProcurementCategory?: string;
+  /** OCDS items with classification (CPV codes mapped here) */
+  items?: OcdsItem[];
+  /** OCDS procuring entity reference */
+  procuringEntity?: OcdsOrganizationReference;
+  /** OCDS parties / organizations */
+  parties?: OcdsOrganization[];
+  /** OCDS structured documents */
+  documents?: OcdsDocument[];
+  /** OCDS milestones */
+  milestones?: OcdsMilestone[];
+  /** OCDS amendments */
+  amendments?: OcdsAmendment[];
+  /** Award criteria */
+  awardCriteria?: string;
+  /** Award criteria details */
+  awardCriteriaDetails?: string;
+  /** Eligibility criteria */
+  eligibilityCriteria?: string;
+  /** Submission methods */
+  submissionMethod?: string[];
+  /** Number of tenderers */
+  numberOfTenderers?: number;
+  /** Tender period: { startDate, endDate } */
+  tenderPeriod?: { startDate?: string; endDate?: string };
+  /** Language (BCP47 tag) */
+  language?: string;
 }
 
 /**

@@ -121,6 +121,8 @@ export class CatalunaAdapter implements IDataSourceAdapter {
       isMinorContract:
         item.tipus_contracte?.toLowerCase().includes('menor') || false,
       rawData: item,
+      // OCDS fields
+      submissionMethod: ['electronicSubmission'],
     };
   }
 

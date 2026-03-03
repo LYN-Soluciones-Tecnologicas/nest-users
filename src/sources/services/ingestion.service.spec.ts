@@ -4,6 +4,11 @@ import { IngestionService } from './ingestion.service';
 import { SourceRegistryService } from './source-registry.service';
 import { DataSourceEntity } from '../entities/data-source.entity';
 import { Tender, TenderStatus, ContractType } from '../../tenders/entities/tender.entity';
+import {
+  OcdsTenderStatus,
+  OcdsProcurementMethod,
+  OcdsProcurementCategory,
+} from '../../common/ocds';
 
 /**
  * Tests for the data ingestion pipeline.
@@ -201,6 +206,250 @@ describe('IngestionService', () => {
 
       const saved = tenderRepo.save.mock.calls[0][0];
       expect(saved.contractType).toBe(expectedType);
+    });
+  });
+
+  // ─── OCDS field mapping tests ─────────────────────────────────────────────
+
+  describe('OCDS field mapping', () => {
+    it('should generate ocid from source ID and external ID', async () => {
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{ externalId: 'EXP-001', title: 'Test' }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.ocid).toBe('ocds-testsource-EXP-001');
+    });
+
+    it('should use provided ocid when available', async () => {
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{
+          externalId: 'EXP-001',
+          title: 'Test',
+          ocid: 'ocds-custom-12345',
+        }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.ocid).toBe('ocds-custom-12345');
+    });
+
+    it.each([
+      ['Abierta', OcdsTenderStatus.ACTIVE],
+      ['Publicada', OcdsTenderStatus.PLANNED],
+      ['Adjudicada', OcdsTenderStatus.COMPLETE],
+      ['Anulada', OcdsTenderStatus.CANCELLED],
+      ['Resuelta', OcdsTenderStatus.COMPLETE],
+    ])('should map "%s" to OCDS status %s', async (rawStatus, expectedOcdsStatus) => {
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{ externalId: 'OCDS-STATUS', title: 'Test', status: rawStatus }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.ocdsStatus).toBe(expectedOcdsStatus);
+    });
+
+    it.each([
+      ['Abierto', OcdsProcurementMethod.OPEN],
+      ['Restringido', OcdsProcurementMethod.SELECTIVE],
+      ['Negociado', OcdsProcurementMethod.LIMITED],
+      ['Menor', OcdsProcurementMethod.DIRECT],
+    ])('should map procedure "%s" to OCDS procurement method %s', async (rawProcedure, expected) => {
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{ externalId: 'METHOD-TEST', title: 'Test', procedureType: rawProcedure }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.procurementMethod).toBe(expected);
+    });
+
+    it.each([
+      ['Servicios', OcdsProcurementCategory.SERVICES],
+      ['Obras', OcdsProcurementCategory.WORKS],
+      ['Suministros', OcdsProcurementCategory.GOODS],
+    ])('should map contract type "%s" to OCDS category %s', async (rawType, expected) => {
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{ externalId: 'CAT-TEST', title: 'Test', contractType: rawType }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.mainProcurementCategory).toBe(expected);
+    });
+
+    it('should build OCDS value from budget amount and currency', async () => {
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{
+          externalId: 'VAL-TEST',
+          title: 'Test',
+          budgetAmount: 100000,
+          currency: 'EUR',
+        }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.value).toEqual({ amount: 100000, currency: 'EUR' });
+    });
+
+    it('should build OCDS items from CPV codes', async () => {
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{
+          externalId: 'CPV-TEST',
+          title: 'Test',
+          cpvCodes: ['72000000', '72200000'],
+        }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.items).toHaveLength(2);
+      expect(saved.items[0]).toEqual({
+        id: '1',
+        classification: { scheme: 'CPV', id: '72000000', description: null },
+      });
+      expect(saved.items[1].classification.id).toBe('72200000');
+    });
+
+    it('should build OCDS procuring entity from contracting authority', async () => {
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{
+          externalId: 'ENT-TEST',
+          title: 'Test',
+          contractingAuthority: 'Ayuntamiento de Madrid',
+        }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.procuringEntity).toEqual({
+        id: 'ayuntamiento-de-madrid',
+        name: 'Ayuntamiento de Madrid',
+      });
+    });
+
+    it('should build OCDS parties from contracting authority', async () => {
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{
+          externalId: 'PARTY-TEST',
+          title: 'Test',
+          contractingAuthority: 'Ministerio de Defensa',
+        }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.parties).toHaveLength(1);
+      expect(saved.parties[0].name).toBe('Ministerio de Defensa');
+      expect(saved.parties[0].roles).toContain('procuringEntity');
+    });
+
+    it('should build OCDS documents from document URLs', async () => {
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{
+          externalId: 'DOC-TEST',
+          title: 'Test',
+          documentUrls: ['https://example.com/pliego.pdf', 'https://example.com/anexo.pdf'],
+        }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.documents).toHaveLength(2);
+      expect(saved.documents[0]).toEqual({ id: '1', url: 'https://example.com/pliego.pdf' });
+      expect(saved.documents[1]).toEqual({ id: '2', url: 'https://example.com/anexo.pdf' });
+    });
+
+    it('should build OCDS tender period from publication date and submission deadline', async () => {
+      const pubDate = new Date('2026-01-01T00:00:00Z');
+      const deadline = new Date('2026-02-15T12:00:00Z');
+
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{
+          externalId: 'PERIOD-TEST',
+          title: 'Test',
+          publicationDate: pubDate,
+          submissionDeadline: deadline,
+        }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.tenderPeriod).toEqual({
+        startDate: pubDate.toISOString(),
+        endDate: deadline.toISOString(),
+      });
+    });
+
+    it('should set default language to "es"', async () => {
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{ externalId: 'LANG-TEST', title: 'Test' }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.language).toBe('es');
+    });
+
+    it('should set releaseTag to ["tender"]', async () => {
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{ externalId: 'TAG-TEST', title: 'Test' }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.releaseTag).toEqual(['tender']);
+    });
+
+    it('should prefer explicitly provided OCDS items over auto-generated ones', async () => {
+      const customItems = [
+        { id: '1', description: 'Software', classification: { scheme: 'CPV', id: '72000000', description: 'IT' } },
+      ];
+
+      mockAdapter.fetch.mockResolvedValue({
+        tenders: [{
+          externalId: 'PREF-TEST',
+          title: 'Test',
+          cpvCodes: ['72000000', '72200000'],
+          items: customItems,
+        }],
+        hasMore: false,
+      });
+
+      await service.ingestFromSource('test-source');
+
+      const saved = tenderRepo.save.mock.calls[0][0];
+      expect(saved.items).toEqual(customItems);
     });
   });
 

@@ -180,6 +180,7 @@ export class TaskExecutorService {
    */
   private renderTemplate(template: string, tender: Tender): string {
     const replacements: Record<string, string> = {
+      // Legacy variables
       tenderTitle: tender.title || '',
       tenderDescription: tender.description || '',
       contractingAuthority: tender.contractingAuthority || '',
@@ -196,6 +197,27 @@ export class TaskExecutorService {
       rawData: tender.rawData
         ? JSON.stringify(tender.rawData, null, 2).slice(0, 5000)
         : 'No disponible',
+      // OCDS variables
+      ocid: tender.ocid || 'No disponible',
+      procurementMethod: tender.procurementMethod || 'No especificado',
+      procurementMethodDetails: tender.procurementMethodDetails || '',
+      mainProcurementCategory: tender.mainProcurementCategory || 'No especificado',
+      ocdsStatus: tender.ocdsStatus || 'No especificado',
+      awardCriteria: tender.awardCriteria || 'No especificado',
+      awardCriteriaDetails: tender.awardCriteriaDetails || 'No disponible',
+      eligibilityCriteria: tender.eligibilityCriteria || 'No disponible',
+      tenderValue: tender.value
+        ? `${tender.value.amount} ${tender.value.currency}`
+        : 'No especificado',
+      tenderPeriod: tender.tenderPeriod
+        ? `${tender.tenderPeriod.startDate || '?'} — ${tender.tenderPeriod.endDate || '?'}`
+        : 'No especificado',
+      procuringEntityName: tender.procuringEntity?.name || tender.contractingAuthority || '',
+      ocdsItems: (tender.items || [])
+        .map((item) =>
+          `${item.classification?.id || ''} ${item.classification?.description || item.description || ''}`.trim(),
+        )
+        .join(', ') || 'No especificado',
     };
 
     let result = template;

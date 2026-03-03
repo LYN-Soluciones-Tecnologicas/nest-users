@@ -144,6 +144,8 @@ export class GaliciaAdapter implements IDataSourceAdapter {
       detailUrl: entry.link?.$?.href || '',
       isMinorContract: false,
       rawData: entry,
+      // OCDS fields
+      submissionMethod: ['electronicSubmission'],
     };
   }
 

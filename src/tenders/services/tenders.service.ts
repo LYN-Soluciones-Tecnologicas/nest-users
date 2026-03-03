@@ -65,6 +65,25 @@ export class TendersService {
       qb.andWhere('t.isDismissed = false');
     }
 
+    // OCDS filters
+    if (dto.ocdsStatus) {
+      qb.andWhere('t.ocdsStatus = :ocdsStatus', {
+        ocdsStatus: dto.ocdsStatus,
+      });
+    }
+
+    if (dto.procurementMethod) {
+      qb.andWhere('t.procurementMethod = :procurementMethod', {
+        procurementMethod: dto.procurementMethod,
+      });
+    }
+
+    if (dto.mainProcurementCategory) {
+      qb.andWhere('t.mainProcurementCategory = :mainProcurementCategory', {
+        mainProcurementCategory: dto.mainProcurementCategory,
+      });
+    }
+
     const allowedSortFields = [
       'publicationDate',
       'submissionDeadline',
@@ -134,6 +153,39 @@ export class TendersService {
       .groupBy('t.status')
       .getRawMany();
 
-    return { total, saved, dismissed, bySource, byStatus };
+    const byOcdsStatus = await this.tenderRepo
+      .createQueryBuilder('t')
+      .select('t.ocdsStatus', 'ocdsStatus')
+      .addSelect('COUNT(*)', 'count')
+      .where('t.ocdsStatus IS NOT NULL')
+      .groupBy('t.ocdsStatus')
+      .getRawMany();
+
+    const byProcurementMethod = await this.tenderRepo
+      .createQueryBuilder('t')
+      .select('t.procurementMethod', 'procurementMethod')
+      .addSelect('COUNT(*)', 'count')
+      .where('t.procurementMethod IS NOT NULL')
+      .groupBy('t.procurementMethod')
+      .getRawMany();
+
+    const byProcurementCategory = await this.tenderRepo
+      .createQueryBuilder('t')
+      .select('t.mainProcurementCategory', 'mainProcurementCategory')
+      .addSelect('COUNT(*)', 'count')
+      .where('t.mainProcurementCategory IS NOT NULL')
+      .groupBy('t.mainProcurementCategory')
+      .getRawMany();
+
+    return {
+      total,
+      saved,
+      dismissed,
+      bySource,
+      byStatus,
+      byOcdsStatus,
+      byProcurementMethod,
+      byProcurementCategory,
+    };
   }
 }

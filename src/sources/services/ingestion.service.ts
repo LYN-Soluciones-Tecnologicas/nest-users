@@ -8,6 +8,18 @@ import {
   RawTenderData,
   SourceQuery,
 } from '../../common/interfaces/data-source.interface';
+import {
+  OcdsTenderStatus,
+  OcdsProcurementMethod,
+  OcdsProcurementCategory,
+  OcdsValue,
+  OcdsPeriod,
+  OcdsItem,
+  OcdsDocument,
+  OcdsOrganizationReference,
+  OcdsOrganization,
+  OcdsPartyRole,
+} from '../../common/ocds';
 
 @Injectable()
 export class IngestionService {
@@ -141,6 +153,8 @@ export class IngestionService {
       tender = this.tenderRepo.create();
     }
 
+    // ─── Legacy fields ──────────────────────────────────────────────────
+
     tender.sourceId = sourceId;
     tender.externalId = raw.externalId;
     tender.title = raw.title;
@@ -160,6 +174,68 @@ export class IngestionService {
     tender.isMinorContract = raw.isMinorContract || false;
     tender.rawData = raw.rawData || null;
 
+    // ─── OCDS fields ────────────────────────────────────────────────────
+
+    // OCID: use provided or generate from source prefix + external ID
+    tender.ocid = raw.ocid || this.buildOcid(sourceId, raw.externalId);
+
+    // OCDS status mapping
+    tender.ocdsStatus = this.mapToOcdsStatus(raw.status);
+
+    // Procurement method: use provided OCDS field or map from procedureType
+    tender.procurementMethod =
+      this.mapToOcdsProcurementMethod(raw.procurementMethod) ||
+      this.mapToOcdsProcurementMethod(raw.procedureType);
+    tender.procurementMethodDetails =
+      raw.procurementMethodDetails || raw.procedureType || null;
+
+    // Main procurement category: use provided or map from contractType
+    tender.mainProcurementCategory =
+      this.mapToOcdsProcurementCategory(raw.mainProcurementCategory) ||
+      this.mapToOcdsProcurementCategory(raw.contractType);
+
+    // OCDS Value
+    tender.value = this.buildOcdsValue(
+      raw.budgetAmount,
+      raw.currency || 'EUR',
+    );
+
+    // OCDS tender period
+    tender.tenderPeriod = this.buildOcdsPeriod(
+      raw.tenderPeriod?.startDate || raw.publicationDate?.toISOString(),
+      raw.tenderPeriod?.endDate || raw.submissionDeadline?.toISOString(),
+    );
+
+    // OCDS items from CPV codes (or use structured items if provided)
+    tender.items = raw.items?.length
+      ? raw.items
+      : this.buildOcdsItems(raw.cpvCodes);
+
+    // OCDS procuring entity
+    tender.procuringEntity = raw.procuringEntity ||
+      this.buildOcdsProcuringEntity(raw.contractingAuthority);
+
+    // OCDS parties
+    tender.parties = raw.parties?.length
+      ? raw.parties
+      : this.buildOcdsParties(raw.contractingAuthority);
+
+    // OCDS documents
+    tender.documents = raw.documents?.length
+      ? raw.documents
+      : this.buildOcdsDocuments(raw.documentUrls);
+
+    // Optional OCDS fields
+    tender.milestones = raw.milestones || [];
+    tender.amendments = raw.amendments || [];
+    tender.awardCriteria = raw.awardCriteria || null;
+    tender.awardCriteriaDetails = raw.awardCriteriaDetails || null;
+    tender.eligibilityCriteria = raw.eligibilityCriteria || null;
+    tender.submissionMethod = raw.submissionMethod || null;
+    tender.numberOfTenderers = raw.numberOfTenderers || null;
+    tender.language = raw.language || 'es';
+    tender.releaseTag = ['tender'];
+
     // Build text for embedding
     tender.embeddingText = [raw.title, raw.description, raw.contractingAuthority]
       .filter(Boolean)
@@ -167,6 +243,86 @@ export class IngestionService {
 
     return this.tenderRepo.save(tender);
   }
+
+  // ─── OCDS builder helpers ───────────────────────────────────────────────────
+
+  private buildOcid(sourceId: string, externalId: string): string {
+    // OCDS prefix: ocds-{publisher-prefix}-{identifier}
+    // Using source ID as publisher prefix
+    const prefix = sourceId.replace(/[^a-z0-9]/gi, '');
+    return `ocds-${prefix}-${externalId}`;
+  }
+
+  private buildOcdsValue(
+    amount?: number,
+    currency?: string,
+  ): OcdsValue | null {
+    if (amount == null) return null;
+    return { amount, currency: currency || 'EUR' };
+  }
+
+  private buildOcdsPeriod(
+    startDate?: string,
+    endDate?: string,
+  ): OcdsPeriod | null {
+    if (!startDate && !endDate) return null;
+    return {
+      startDate: startDate || null,
+      endDate: endDate || null,
+    };
+  }
+
+  private buildOcdsItems(cpvCodes?: string[]): OcdsItem[] {
+    if (!cpvCodes?.length) return [];
+    return cpvCodes.map((code, index) => ({
+      id: String(index + 1),
+      classification: {
+        scheme: 'CPV',
+        id: code,
+        description: null,
+      },
+    }));
+  }
+
+  private buildOcdsProcuringEntity(
+    name?: string,
+  ): OcdsOrganizationReference | null {
+    if (!name) return null;
+    return {
+      id: this.slugify(name),
+      name,
+    };
+  }
+
+  private buildOcdsParties(name?: string): OcdsOrganization[] {
+    if (!name) return [];
+    return [
+      {
+        id: this.slugify(name),
+        name,
+        roles: [OcdsPartyRole.PROCURING_ENTITY],
+      },
+    ];
+  }
+
+  private buildOcdsDocuments(urls?: string[]): OcdsDocument[] {
+    if (!urls?.length) return [];
+    return urls.map((url, index) => ({
+      id: String(index + 1),
+      url,
+    }));
+  }
+
+  private slugify(text: string): string {
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+  }
+
+  // ─── Status mapping ─────────────────────────────────────────────────────────
 
   private mapStatus(status?: string): TenderStatus {
     if (!status) return TenderStatus.UNKNOWN;
@@ -180,6 +336,20 @@ export class IngestionService {
     return TenderStatus.UNKNOWN;
   }
 
+  private mapToOcdsStatus(status?: string): OcdsTenderStatus {
+    if (!status) return OcdsTenderStatus.PLANNED;
+    const s = status.toLowerCase();
+    if (s.includes('publicad') || s.includes('publish')) return OcdsTenderStatus.PLANNED;
+    if (s.includes('abiert') || s.includes('open')) return OcdsTenderStatus.ACTIVE;
+    if (s.includes('cerrad') || s.includes('closed')) return OcdsTenderStatus.ACTIVE;
+    if (s.includes('adjudic') || s.includes('award')) return OcdsTenderStatus.COMPLETE;
+    if (s.includes('resuelt') || s.includes('resolv')) return OcdsTenderStatus.COMPLETE;
+    if (s.includes('cancel') || s.includes('anulad')) return OcdsTenderStatus.CANCELLED;
+    if (s.includes('desiert') || s.includes('unsuccess')) return OcdsTenderStatus.UNSUCCESSFUL;
+    if (s.includes('retir') || s.includes('withdraw')) return OcdsTenderStatus.WITHDRAWN;
+    return OcdsTenderStatus.PLANNED;
+  }
+
   private mapContractType(type?: string): ContractType {
     if (!type) return ContractType.OTHER;
     const t = type.toLowerCase();
@@ -188,5 +358,34 @@ export class IngestionService {
     if (t.includes('suministro') || t.includes('suppl')) return ContractType.SUPPLIES;
     if (t.includes('mixt') || t.includes('mixed')) return ContractType.MIXED;
     return ContractType.OTHER;
+  }
+
+  private mapToOcdsProcurementMethod(
+    method?: string,
+  ): OcdsProcurementMethod | null {
+    if (!method) return null;
+    const m = method.toLowerCase();
+    if (m.includes('abiert') || m.includes('open')) return OcdsProcurementMethod.OPEN;
+    if (m.includes('restringid') || m.includes('selective') || m.includes('restrict'))
+      return OcdsProcurementMethod.SELECTIVE;
+    if (m.includes('negociad') || m.includes('limited') || m.includes('negotiat'))
+      return OcdsProcurementMethod.LIMITED;
+    if (m.includes('direct') || m.includes('menor') || m.includes('minor'))
+      return OcdsProcurementMethod.DIRECT;
+    return null;
+  }
+
+  private mapToOcdsProcurementCategory(
+    category?: string,
+  ): OcdsProcurementCategory | null {
+    if (!category) return null;
+    const c = category.toLowerCase();
+    if (c.includes('servicio') || c.includes('service') || c === 'services')
+      return OcdsProcurementCategory.SERVICES;
+    if (c.includes('obra') || c.includes('work') || c === 'works')
+      return OcdsProcurementCategory.WORKS;
+    if (c.includes('suministro') || c.includes('suppl') || c.includes('good') || c === 'goods')
+      return OcdsProcurementCategory.GOODS;
+    return null;
   }
 }

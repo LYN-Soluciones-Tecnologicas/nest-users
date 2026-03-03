@@ -94,8 +94,15 @@ export class CompanyService {
     let factors = 0;
 
     // 1. CPV code matching (high weight)
-    if (tender.cpvCodes?.length && profile.cpvCodes?.length) {
-      const tenderCpvPrefixes = tender.cpvCodes.map((c) =>
+    // Use legacy cpvCodes or extract from OCDS items classification
+    const tenderCpvCodes = tender.cpvCodes?.length
+      ? tender.cpvCodes
+      : (tender.items || [])
+          .map((item) => item.classification?.id)
+          .filter((id): id is string => !!id);
+
+    if (tenderCpvCodes.length && profile.cpvCodes?.length) {
+      const tenderCpvPrefixes = tenderCpvCodes.map((c) =>
         c.substring(0, 2),
       );
       const profileCpvPrefixes = profile.cpvCodes.map((c) =>
@@ -106,7 +113,7 @@ export class CompanyService {
       );
 
       // Check exact match too
-      const exactMatch = tender.cpvCodes.some((tc) =>
+      const exactMatch = tenderCpvCodes.some((tc) =>
         profile.cpvCodes.some(
           (pc) => tc.startsWith(pc.substring(0, 5)) || pc.startsWith(tc.substring(0, 5)),
         ),
@@ -145,13 +152,14 @@ export class CompanyService {
       factors++;
     }
 
-    // 4. Contract type preference
+    // 4. Contract type preference (check both legacy and OCDS fields)
     if (
       profile.preferredContractTypes?.length &&
-      tender.contractType
+      (tender.contractType || tender.mainProcurementCategory)
     ) {
+      const typeToCheck = tender.mainProcurementCategory || tender.contractType;
       const typeMatch = profile.preferredContractTypes.some(
-        (pt) => tender.contractType.toLowerCase().includes(pt.toLowerCase()),
+        (pt) => typeToCheck.toLowerCase().includes(pt.toLowerCase()),
       );
       if (typeMatch) score += 0.1;
       factors++;

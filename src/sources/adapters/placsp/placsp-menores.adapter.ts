@@ -119,6 +119,8 @@ export class PlacspMenoresAdapter implements IDataSourceAdapter {
       publicationDate: entry.updated ? new Date(entry.updated) : new Date(),
       detailUrl: entry.link?.$?.href || '',
       rawData: entry,
+      // OCDS: contratos menores are direct awards
+      procurementMethod: 'direct',
     };
   }
 

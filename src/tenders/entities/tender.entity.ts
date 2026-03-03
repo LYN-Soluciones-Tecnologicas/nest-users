@@ -9,6 +9,21 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { DataSourceEntity } from '../../sources/entities/data-source.entity';
+import {
+  OcdsTenderStatus,
+  OcdsProcurementMethod,
+  OcdsProcurementCategory,
+  OcdsValue,
+  OcdsPeriod,
+  OcdsItem,
+  OcdsDocument,
+  OcdsOrganization,
+  OcdsOrganizationReference,
+  OcdsMilestone,
+  OcdsAmendment,
+} from '../../common/ocds';
+
+// ─── Legacy enums (kept for backward compatibility) ───────────────────────────
 
 export enum TenderStatus {
   PUBLISHED = 'published',
@@ -33,9 +48,19 @@ export enum ContractType {
 @Index(['status'])
 @Index(['publicationDate'])
 @Index(['submissionDeadline'])
+@Index(['ocdsStatus'])
+@Index(['procurementMethod'])
+@Index(['mainProcurementCategory'])
+@Index(['ocid'], { unique: true, where: '"ocid" IS NOT NULL' })
 export class Tender {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  // ─── OCDS Identifier ─────────────────────────────────────────────────
+
+  /** Open Contracting ID — globally unique across all sources */
+  @Column({ nullable: true, unique: true })
+  ocid: string;
 
   /** External ID from the data source */
   @Column()
@@ -48,6 +73,8 @@ export class Tender {
   @ManyToOne(() => DataSourceEntity, { eager: false })
   @JoinColumn({ name: 'sourceId', referencedColumnName: 'id' })
   source: DataSourceEntity;
+
+  // ─── Core fields (compatible with both legacy and OCDS) ──────────────
 
   @Column()
   title: string;
@@ -67,6 +94,8 @@ export class Tender {
   @Column({ default: 'EUR' })
   currency: string;
 
+  // ─── Legacy status/type (kept for backward compat) ───────────────────
+
   @Column({
     type: 'enum',
     enum: TenderStatus,
@@ -83,6 +112,101 @@ export class Tender {
 
   @Column({ nullable: true })
   procedureType: string;
+
+  // ─── OCDS Status & Method ────────────────────────────────────────────
+
+  /** OCDS tender status codelist */
+  @Column({
+    type: 'varchar',
+    nullable: true,
+  })
+  ocdsStatus: OcdsTenderStatus;
+
+  /** OCDS procurement method (open, selective, limited, direct) */
+  @Column({
+    type: 'varchar',
+    nullable: true,
+  })
+  procurementMethod: OcdsProcurementMethod;
+
+  /** Free-text description of the procurement method */
+  @Column({ nullable: true })
+  procurementMethodDetails: string;
+
+  /** OCDS main procurement category (goods, works, services) */
+  @Column({
+    type: 'varchar',
+    nullable: true,
+  })
+  mainProcurementCategory: OcdsProcurementCategory;
+
+  // ─── OCDS Structured fields (JSONB) ──────────────────────────────────
+
+  /** OCDS Value: { amount, currency } */
+  @Column({ type: 'jsonb', nullable: true })
+  value: OcdsValue;
+
+  /** OCDS tender period: { startDate, endDate } */
+  @Column({ type: 'jsonb', nullable: true })
+  tenderPeriod: OcdsPeriod;
+
+  /** OCDS items with CPV classification */
+  @Column({ type: 'jsonb', default: '[]' })
+  items: OcdsItem[];
+
+  /** OCDS procuring entity reference */
+  @Column({ type: 'jsonb', nullable: true })
+  procuringEntity: OcdsOrganizationReference;
+
+  /** OCDS parties / organizations involved */
+  @Column({ type: 'jsonb', default: '[]' })
+  parties: OcdsOrganization[];
+
+  /** OCDS structured documents */
+  @Column({ type: 'jsonb', default: '[]' })
+  documents: OcdsDocument[];
+
+  /** OCDS milestones */
+  @Column({ type: 'jsonb', default: '[]' })
+  milestones: OcdsMilestone[];
+
+  /** OCDS amendments */
+  @Column({ type: 'jsonb', default: '[]' })
+  amendments: OcdsAmendment[];
+
+  // ─── OCDS Criteria & Submission ──────────────────────────────────────
+
+  /** Award criteria description */
+  @Column({ nullable: true })
+  awardCriteria: string;
+
+  /** Detailed award criteria */
+  @Column({ type: 'text', nullable: true })
+  awardCriteriaDetails: string;
+
+  /** Eligibility requirements */
+  @Column({ type: 'text', nullable: true })
+  eligibilityCriteria: string;
+
+  /** Submission methods (e.g. electronicSubmission) */
+  @Column('text', { array: true, nullable: true })
+  submissionMethod: string[];
+
+  /** Number of tenderers / bidders */
+  @Column({ type: 'int', nullable: true })
+  numberOfTenderers: number;
+
+  // ─── OCDS Release metadata ──────────────────────────────────────────
+
+  /** OCDS release tags */
+  @Column('text', { array: true, default: "'{tender}'" })
+  releaseTag: string[];
+
+  /** Language (BCP47) */
+  @Column({ default: 'es' })
+  language: string;
+
+  // ─── Existing fields ─────────────────────────────────────────────────
 
   @Column({ nullable: true })
   location: string;

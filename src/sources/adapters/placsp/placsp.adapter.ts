@@ -222,6 +222,8 @@ export class PlacspAdapter implements IDataSourceAdapter {
       documentUrls,
       isMinorContract: false,
       rawData: entry,
+      // OCDS fields from CODICE XML
+      submissionMethod: ['electronicSubmission'],
     };
   }
 
