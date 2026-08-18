@@ -1,0 +1,6 @@
+# CODEOWNERS — política de la organización LYN Soluciones Tecnológicas
+# Todo PR a la rama principal necesita al menos una aprobación del equipo production.
+* @LYN-Soluciones-Tecnologicas/production
+
+# Los cambios en pipelines/workflows de la rama principal los aprueba deployment_prod.
+/.github/workflows/ @LYN-Soluciones-Tecnologicas/deployment_prod
